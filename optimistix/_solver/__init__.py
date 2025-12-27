@@ -38,6 +38,12 @@ from .nonlinear_cg import (
     polak_ribiere as polak_ribiere,
 )
 from .optax import OptaxMinimiser as OptaxMinimiser
+from .preconditioned_methods import (
+    AbstractPreconditioner as AbstractPreconditioner,
+    IdentityPreconditioner as IdentityPreconditioner,
+    PreconditionedGradientDescent as PreconditionedGradientDescent,
+    PreconditionedNonlinearCG as PreconditionedNonlinearCG,
+)
 from .quasi_newton import (
     AbstractBFGS as AbstractBFGS,
     AbstractDFP as AbstractDFP,

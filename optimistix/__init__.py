@@ -42,6 +42,7 @@ from ._solver import (
     AbstractGaussNewton as AbstractGaussNewton,
     AbstractGradientDescent as AbstractGradientDescent,
     AbstractLBFGS as AbstractLBFGS,
+    AbstractPreconditioner as AbstractPreconditioner,
     AbstractQuasiNewton as AbstractQuasiNewton,
     BacktrackingArmijo as BacktrackingArmijo,
     BestSoFarFixedPoint as BestSoFarFixedPoint,
@@ -63,6 +64,7 @@ from ._solver import (
     GoldenSearch as GoldenSearch,
     GradientDescent as GradientDescent,
     hestenes_stiefel as hestenes_stiefel,
+    IdentityPreconditioner as IdentityPreconditioner,
     IndirectDampedNewtonDescent as IndirectDampedNewtonDescent,
     IndirectLevenbergMarquardt as IndirectLevenbergMarquardt,
     LBFGS as LBFGS,
@@ -76,6 +78,8 @@ from ._solver import (
     NonlinearCGDescent as NonlinearCGDescent,
     OptaxMinimiser as OptaxMinimiser,
     polak_ribiere as polak_ribiere,
+    PreconditionedGradientDescent as PreconditionedGradientDescent,
+    PreconditionedNonlinearCG as PreconditionedNonlinearCG,
     SteepestDescent as SteepestDescent,
 )
 

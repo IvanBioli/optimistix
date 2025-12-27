@@ -54,6 +54,7 @@ class FunctionInfo(eqx.Module):
 
     Eval: ClassVar[type["Eval"]]
     EvalGrad: ClassVar[type["EvalGrad"]]
+    EvalPGrad: ClassVar[type["EvalPGrad"]]
     EvalGradHessian: ClassVar[type["EvalGradHessian"]]
     EvalGradHessianInv: ClassVar[type["EvalGradHessianInv"]]
     Residual: ClassVar[type["Residual"]]
@@ -87,6 +88,24 @@ class EvalGrad(FunctionInfo, Generic[Y]):
 
     f: Scalar
     grad: Y
+
+    def as_min(self):
+        return self.f
+
+    def compute_grad_dot(self, y: Y):
+        return tree_dot(self.grad, y)
+
+
+# NOT PUBLIC, despite lacking an underscore. This is so pyright gets the name right.
+class EvalPGrad(FunctionInfo, Generic[Y]):
+    """Has `.f` and `.grad` attributes as with [`optimistix.FunctionInfo.EvalGrad`][].
+    Also has a `.pgrad` attribute describing the preconditioned gradient. Used with
+    preconditioned first-order solvers for minimisation problems.
+    """
+
+    f: Scalar
+    grad: Y
+    pgrad: Y
 
     def as_min(self):
         return self.f
@@ -185,12 +204,14 @@ class ResidualJac(FunctionInfo, Generic[Y, Out]):
 
 Eval.__qualname__ = "FunctionInfo.Eval"
 EvalGrad.__qualname__ = "FunctionInfo.EvalGrad"
+EvalPGrad.__qualname__ = "FunctionInfo.EvalPGrad"
 EvalGradHessian.__qualname__ = "FunctionInfo.EvalGradHessian"
 EvalGradHessianInv.__qualname__ = "FunctionInfo.EvalGradHessianInv"
 Residual.__qualname__ = "FunctionInfo.Residual"
 ResidualJac.__qualname__ = "FunctionInfo.ResidualJac"
 FunctionInfo.Eval = Eval
 FunctionInfo.EvalGrad = EvalGrad
+FunctionInfo.EvalPGrad = EvalPGrad
 FunctionInfo.EvalGradHessian = EvalGradHessian
 FunctionInfo.EvalGradHessianInv = EvalGradHessianInv
 FunctionInfo.Residual = Residual
@@ -207,6 +228,14 @@ EvalGrad.__init__.__doc__ = """**Arguments:**
 
 - `f`: the scalar output of a function evaluation `fn(y)`.
 - `grad`: the output of a gradient evaluation `grad(fn)(y)`.
+"""
+
+
+EvalPGrad.__init__.__doc__ = """**Arguments:**
+
+- `f`: the scalar output of a function evaluation `fn(y)`.
+- `grad`: the output of a gradient evaluation `grad(fn)(y)`.
+- `pgrad`: the preconditioned gradient.
 """
 
 

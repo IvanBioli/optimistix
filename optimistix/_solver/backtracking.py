@@ -16,6 +16,7 @@ class _BacktrackingState(eqx.Module):
 
 _FnInfo: TypeAlias = (
     FunctionInfo.EvalGrad
+    | FunctionInfo.EvalPGrad
     | FunctionInfo.EvalGradHessian
     | FunctionInfo.EvalGradHessianInv
     | FunctionInfo.ResidualJac
@@ -65,6 +66,7 @@ class BacktrackingArmijo(AbstractSearch[Y, _FnInfo, _FnEvalInfo, _BacktrackingSt
             f_info,
             (
                 FunctionInfo.EvalGrad,
+                FunctionInfo.EvalPGrad,
                 FunctionInfo.EvalGradHessian,
                 FunctionInfo.EvalGradHessianInv,
                 FunctionInfo.ResidualJac,

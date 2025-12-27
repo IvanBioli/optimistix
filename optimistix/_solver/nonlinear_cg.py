@@ -20,12 +20,31 @@ from .backtracking import BacktrackingArmijo
 from .gradient_methods import AbstractGradientDescent
 
 
-def polak_ribiere(grad_vector: Y, grad_prev: Y, y_diff_prev: Y) -> Scalar:
+def polak_ribiere(
+    grad_vector: Y,
+    grad_prev: Y,
+    y_diff_prev: Y,
+    preconditioned_grad: Y | None = None,
+    preconditioned_grad_prev: Y | None = None,
+) -> Scalar:
     """The Polak--Ribière formula for β. Used with [`optimistix.NonlinearCG`][] and
-    [`optimistix.NonlinearCGDescent`][]."""
+    [`optimistix.NonlinearCGDescent`][].
+
+    **Arguments:**
+
+    - `grad_vector`: The current gradient.
+    - `grad_prev`: The previous gradient.
+    - `y_diff_prev`: The previous search direction.
+    - `preconditioned_grad`: The current preconditioned gradient (optional).
+    - `preconditioned_grad_prev`: The previous preconditioned gradient (optional).
+    """
     del y_diff_prev
-    numerator = tree_dot(grad_vector, (grad_vector**ω - grad_prev**ω).ω)
-    denominator = sum_squares(grad_prev)
+    if preconditioned_grad is None:
+        preconditioned_grad = grad_vector
+    if preconditioned_grad_prev is None:
+        preconditioned_grad_prev = grad_prev
+    numerator = tree_dot(preconditioned_grad, (grad_vector**ω - grad_prev**ω).ω)
+    denominator = tree_dot(grad_prev, preconditioned_grad_prev)
     # This triggers under two scenarios: (a) at the very start, for which our
     # `grad_prev` is initialised at zero, and (b) at convergence, for which we no longer
     # have a gradient. In either case we set β=0 to revert to just gradient descent.
@@ -35,23 +54,60 @@ def polak_ribiere(grad_vector: Y, grad_prev: Y, y_diff_prev: Y) -> Scalar:
     return cast(Scalar, out)
 
 
-def fletcher_reeves(grad: Y, grad_prev: Y, y_diff_prev: Y) -> Scalar:
+def fletcher_reeves(
+    grad: Y,
+    grad_prev: Y,
+    y_diff_prev: Y,
+    preconditioned_grad: Y | None = None,
+    preconditioned_grad_prev: Y | None = None,
+) -> Scalar:
     """The Fletcher--Reeves formula for β. Used with [`optimistix.NonlinearCG`][] and
-    [`optimistix.NonlinearCGDescent`][]."""
+    [`optimistix.NonlinearCGDescent`][].
+
+    **Arguments:**
+
+    - `grad`: The current gradient.
+    - `grad_prev`: The previous gradient.
+    - `y_diff_prev`: The previous search direction.
+    - `preconditioned_grad`: The current preconditioned gradient (optional).
+    - `preconditioned_grad_prev`: The previous preconditioned gradient (optional).
+    """
     del y_diff_prev
-    numerator = sum_squares(grad)
-    denominator = sum_squares(grad_prev)
+    if preconditioned_grad is None:
+        preconditioned_grad = grad
+    if preconditioned_grad_prev is None:
+        preconditioned_grad_prev = grad_prev
+    numerator = tree_dot(grad, preconditioned_grad)
+    denominator = tree_dot(grad_prev, preconditioned_grad_prev)
     # Triggers at initialisation and convergence, as above.
     pred = denominator > jnp.finfo(denominator.dtype).eps
     safe_denom = jnp.where(pred, denominator, 1)
     return cast(Scalar, jnp.where(pred, numerator / safe_denom, 0))
 
 
-def hestenes_stiefel(grad: Y, grad_prev: Y, y_diff_prev: Y) -> Scalar:
+def hestenes_stiefel(
+    grad: Y,
+    grad_prev: Y,
+    y_diff_prev: Y,
+    preconditioned_grad: Y | None = None,
+    preconditioned_grad_prev: Y | None = None,
+) -> Scalar:
     """The Hestenes--Stiefel formula for β. Used with [`optimistix.NonlinearCG`][] and
-    [`optimistix.NonlinearCGDescent`][]."""
+    [`optimistix.NonlinearCGDescent`][].
+
+    **Arguments:**
+
+    - `grad`: The current gradient.
+    - `grad_prev`: The previous gradient.
+    - `y_diff_prev`: The previous search direction.
+    - `preconditioned_grad`: The current preconditioned gradient (optional).
+    - `preconditioned_grad_prev`: The previous preconditioned gradient (optional).
+    """
+    if preconditioned_grad is None:
+        preconditioned_grad = grad
+    del preconditioned_grad_prev
     grad_diff = (grad**ω - grad_prev**ω).ω
-    numerator = tree_dot(grad, grad_diff)
+    numerator = tree_dot(preconditioned_grad, grad_diff)
     denominator = -tree_dot(y_diff_prev, grad_diff)
     # Triggers at initialisation and convergence, as above.
     pred = jnp.abs(denominator) > jnp.finfo(denominator.dtype).eps
@@ -59,10 +115,30 @@ def hestenes_stiefel(grad: Y, grad_prev: Y, y_diff_prev: Y) -> Scalar:
     return cast(Scalar, jnp.where(pred, numerator / safe_denom, 0))
 
 
-def dai_yuan(grad: Y, grad_prev: Y, y_diff_prev: Y) -> Scalar:
+def dai_yuan(
+    grad: Y,
+    grad_prev: Y,
+    y_diff_prev: Y,
+    preconditioned_grad: Y | None = None,
+    preconditioned_grad_prev: Y | None = None,
+) -> Scalar:
     """The Dai--Yuan formula for β. Used with [`optimistix.NonlinearCG`][] and
-    [`optimistix.NonlinearCGDescent`][]."""
-    numerator = sum_squares(grad)
+    [`optimistix.NonlinearCGDescent`][].
+
+    **Arguments:**
+
+    - `grad`: The current gradient.
+    - `grad_prev`: The previous gradient.
+    - `y_diff_prev`: The previous search direction.
+    - `preconditioned_grad`: The current preconditioned gradient (optional).
+    - `preconditioned_grad_prev`: The previous preconditioned gradient (optional).
+    """
+    if preconditioned_grad is None:
+        preconditioned_grad = grad
+    if preconditioned_grad_prev is None:
+        preconditioned_grad_prev = grad_prev
+    del preconditioned_grad_prev
+    numerator = tree_dot(grad, preconditioned_grad)
     denominator = -tree_dot(y_diff_prev, (grad**ω - grad_prev**ω).ω)
     # Triggers at initialisation and convergence, as above.
     pred = jnp.abs(denominator) > jnp.finfo(denominator.dtype).eps
@@ -92,10 +168,12 @@ class NonlinearCGDescent(
     def init(
         self,
         y: Y,
-        f_info_struct: FunctionInfo.EvalGrad
-        | FunctionInfo.EvalGradHessian
-        | FunctionInfo.EvalGradHessianInv
-        | FunctionInfo.ResidualJac,
+        f_info_struct: (
+            FunctionInfo.EvalGrad
+            | FunctionInfo.EvalGradHessian
+            | FunctionInfo.EvalGradHessianInv
+            | FunctionInfo.ResidualJac
+        ),
     ) -> _NonlinearCGDescentState:
         del f_info_struct
         return _NonlinearCGDescentState(
@@ -106,10 +184,12 @@ class NonlinearCGDescent(
     def query(
         self,
         y: Y,
-        f_info: FunctionInfo.EvalGrad
-        | FunctionInfo.EvalGradHessian
-        | FunctionInfo.EvalGradHessianInv
-        | FunctionInfo.ResidualJac,
+        f_info: (
+            FunctionInfo.EvalGrad
+            | FunctionInfo.EvalGradHessian
+            | FunctionInfo.EvalGradHessianInv
+            | FunctionInfo.ResidualJac
+        ),
         state: _NonlinearCGDescentState,
     ) -> _NonlinearCGDescentState:
         del y
