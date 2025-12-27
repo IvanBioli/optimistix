@@ -297,21 +297,33 @@ class PreconditionedGradientDescent(AbstractMinimiser[Y, Aux, _PreconditionedGDS
             lambda _y: fn(_y, args), state.y_eval, has_aux=True
         )
 
+        # Compute gradient if needed by line search
+        if self.search._needs_grad_at_y_eval:
+            grad = lin_to_grad(lin_fn, state.y_eval, autodiff_mode)
+            f_eval_info = FunctionInfo.EvalGrad(f_eval, grad)
+        else:
+            f_eval_info = FunctionInfo.Eval(f_eval)
+
         # Line search step
         step_size, accept, search_result, search_state = self.search.step(
             state.first_step,
             y,
             state.y_eval,
             state.f_info,
-            FunctionInfo.Eval(f_eval),
+            f_eval_info,  # pyright: ignore
             state.search_state,
         )
 
         def accepted(preconditioner_state):
-            # Compute gradient
-            grad = lin_to_grad(lin_fn, state.y_eval, autodiff_mode=autodiff_mode)
+            nonlocal f_eval_info
 
-            # Prepare and apply preconditioner (using EvalGrad for prepare call)
+            # Compute gradient if not already computed
+            if not self.search._needs_grad_at_y_eval:
+                grad = lin_to_grad(lin_fn, state.y_eval, autodiff_mode=autodiff_mode)
+            else:
+                grad = f_eval_info.grad  # pyright: ignore
+
+            # Prepare and apply preconditioner
             f_eval_info_for_prepare = FunctionInfo.EvalGrad(f_eval, grad)
             current_preconditioner, new_preconditioner_state = (
                 self.preconditioner.prepare(
@@ -327,7 +339,7 @@ class PreconditionedGradientDescent(AbstractMinimiser[Y, Aux, _PreconditionedGDS
             )
 
             # Create EvalPGrad with all gradient info
-            f_eval_info = FunctionInfo.EvalPGrad(f_eval, grad, preconditioned_grad)
+            f_eval_info_out = FunctionInfo.EvalPGrad(f_eval, grad, preconditioned_grad)
 
             # Check termination
             y_diff = (state.y_eval**ω - y**ω).ω
@@ -339,7 +351,7 @@ class PreconditionedGradientDescent(AbstractMinimiser[Y, Aux, _PreconditionedGDS
 
             return (
                 state.y_eval,
-                f_eval_info,
+                f_eval_info_out,
                 aux_eval,
                 preconditioned_grad,
                 new_preconditioner_state,
@@ -545,23 +557,33 @@ class PreconditionedNonlinearCG(AbstractMinimiser[Y, Aux, _PreconditionedCGState
             lambda _y: fn(_y, args), state.y_eval, has_aux=True
         )
 
+        # Compute gradient if needed by line search
+        if self.search._needs_grad_at_y_eval:
+            grad_for_search = lin_to_grad(lin_fn, state.y_eval, autodiff_mode)
+            f_eval_info = FunctionInfo.EvalGrad(f_eval, grad_for_search)
+        else:
+            f_eval_info = FunctionInfo.Eval(f_eval)
+
         # Line search step
         step_size, accept, search_result, search_state = self.search.step(
             state.first_step,
             y,
             state.y_eval,
             state.f_info,
-            FunctionInfo.Eval(f_eval),
+            f_eval_info,  # pyright: ignore
             state.search_state,
         )
 
         def accepted(
             preconditioner_state, grad_prev, precond_grad_prev, search_dir_prev
         ):
-            # Compute gradient
-            grad = lin_to_grad(lin_fn, state.y_eval, autodiff_mode=autodiff_mode)
+            # Compute gradient if not already computed
+            if not self.search._needs_grad_at_y_eval:
+                grad = lin_to_grad(lin_fn, state.y_eval, autodiff_mode=autodiff_mode)
+            else:
+                grad = f_eval_info.grad  # pyright: ignore
 
-            # Prepare and apply preconditioner (using EvalGrad for prepare call)
+            # Prepare and apply preconditioner
             f_eval_info_for_prepare = FunctionInfo.EvalGrad(f_eval, grad)
             current_preconditioner, new_preconditioner_state = (
                 self.preconditioner.prepare(
@@ -577,7 +599,7 @@ class PreconditionedNonlinearCG(AbstractMinimiser[Y, Aux, _PreconditionedCGState
             )
 
             # Create EvalPGrad with all gradient info
-            f_eval_info = FunctionInfo.EvalPGrad(f_eval, grad, preconditioned_grad)
+            f_eval_info_out = FunctionInfo.EvalPGrad(f_eval, grad, preconditioned_grad)
 
             # Compute beta using preconditioned gradients (Polak-Ribière style)
             beta = self.method(
@@ -609,7 +631,7 @@ class PreconditionedNonlinearCG(AbstractMinimiser[Y, Aux, _PreconditionedCGState
 
             return (
                 state.y_eval,
-                f_eval_info,
+                f_eval_info_out,
                 aux_eval,
                 grad,
                 preconditioned_grad,
