@@ -81,6 +81,7 @@ from ._solver import (
     PreconditionedGradientDescent as PreconditionedGradientDescent,
     PreconditionedNonlinearCG as PreconditionedNonlinearCG,
     SteepestDescent as SteepestDescent,
+    Zoom as Zoom,
 )
 
 
