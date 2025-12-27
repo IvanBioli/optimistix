@@ -22,6 +22,7 @@ _FnInfo: TypeAlias = (
     FunctionInfo.EvalGrad
     | FunctionInfo.EvalGradHessian
     | FunctionInfo.EvalGradHessianInv
+    | FunctionInfo.EvalPGrad
 )
 
 

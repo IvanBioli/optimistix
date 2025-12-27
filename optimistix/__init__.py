@@ -44,6 +44,7 @@ from ._solver import (
     AbstractLBFGS as AbstractLBFGS,
     AbstractPreconditioner as AbstractPreconditioner,
     AbstractQuasiNewton as AbstractQuasiNewton,
+    AbstractSSBroyden as AbstractSSBroyden,
     BacktrackingArmijo as BacktrackingArmijo,
     BestSoFarFixedPoint as BestSoFarFixedPoint,
     BestSoFarLeastSquares as BestSoFarLeastSquares,
@@ -80,6 +81,7 @@ from ._solver import (
     polak_ribiere as polak_ribiere,
     PreconditionedGradientDescent as PreconditionedGradientDescent,
     PreconditionedNonlinearCG as PreconditionedNonlinearCG,
+    SSBroyden as SSBroyden,
     SteepestDescent as SteepestDescent,
     Zoom as Zoom,
 )
