@@ -227,7 +227,7 @@ class Zoom(AbstractSearch[Y, _FnInfo, FunctionInfo.EvalGrad, ZoomState]):
 
     # TODO decide on defaults
     c1: float = 1e-4
-    c2: float = 0.9
+    c2: float | None = 0.9
     c3: float | None = 1e-6
     max_stepsize: float = 1.0
     increase_factor: float = 1.5
@@ -244,11 +244,12 @@ class Zoom(AbstractSearch[Y, _FnInfo, FunctionInfo.EvalGrad, ZoomState]):
             (self.c1 <= 0) | (self.c1 >= 1),
             "`Zoom(c1=...)` must be between 0 and 1.",
         )
-        self.c2 = eqx.error_if(
-            self.c2,
-            (self.c2 <= self.c1) | (self.c2 >= 1),
-            "`Zoom(c2=...)` must be between `c1` and 1.",
-        )
+        if self.c2 is not None:
+            self.c2 = eqx.error_if(
+                self.c2,
+                (self.c2 <= self.c1) | (self.c2 >= 1),
+                "`Zoom(c2=...)` must be between `c1` and 1.",
+            )
 
         self.max_stepsize = eqx.error_if(
             self.max_stepsize,
@@ -485,8 +486,11 @@ class Zoom(AbstractSearch[Y, _FnInfo, FunctionInfo.EvalGrad, ZoomState]):
         self, slope_at_new_point: FloatScalar, slope_init: FloatScalar
     ) -> BoolScalar:
         """Evaluate the strong Wolfe curvature condition."""
-        curv_error = jnp.abs(slope_at_new_point) - self.c2 * jnp.abs(slope_init)
-        return curv_error <= 0.0
+        if self.c2 is None:
+            return jnp.array(True)
+        else:
+            curv_error = jnp.abs(slope_at_new_point) - self.c2 * jnp.abs(slope_init)
+            return curv_error <= 0.0
 
     def _zoom_into_interval(self, y, y_eval, f_info, f_eval_info, state) -> ZoomState:
         """Attempt to find an acceptable stepsize in the interval (state.lo, state.lo).
