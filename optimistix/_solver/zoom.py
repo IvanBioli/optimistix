@@ -180,8 +180,10 @@ class PointEvalGrad(eqx.Module, Generic[Y]):
 
 
 class ZoomState(eqx.Module, Generic[Y]):
-    # number of iterations in the current linesearch
+    # number of iterations in the current linesearch (equivalent to num_steps)
     ls_iter_num: IntScalar
+    # whether the last step was accepted
+    accepted: BoolScalar
     # point where the linesearch is anchored
     init_point: PointEvalGrad[Y]
     slope_init: FloatScalar
@@ -335,6 +337,7 @@ class Zoom(AbstractSearch[Y, _FnInfo, FunctionInfo.EvalGrad, ZoomState]):
 
         return ZoomState(
             ls_iter_num=jnp.array(0),
+            accepted=jnp.array(False),
             init_point=init_point,
             slope_init=_slope_init,
             #
@@ -379,6 +382,7 @@ class Zoom(AbstractSearch[Y, _FnInfo, FunctionInfo.EvalGrad, ZoomState]):
 
         return ZoomState(
             ls_iter_num=jnp.array(0),
+            accepted=jnp.array(False),
             init_point=init_point,
             slope_init=_slope_init,
             #
@@ -615,6 +619,8 @@ class Zoom(AbstractSearch[Y, _FnInfo, FunctionInfo.EvalGrad, ZoomState]):
         return ZoomState(
             ls_iter_num=state.ls_iter_num + 1,
             #
+            accepted=done,
+            #
             init_point=state.init_point,
             slope_init=state.slope_init,
             #
@@ -725,6 +731,8 @@ class Zoom(AbstractSearch[Y, _FnInfo, FunctionInfo.EvalGrad, ZoomState]):
 
         return ZoomState(
             ls_iter_num=state.ls_iter_num + 1,
+            #
+            accepted=done,
             #
             init_point=state.init_point,
             slope_init=state.slope_init,
@@ -960,6 +968,7 @@ class Zoom(AbstractSearch[Y, _FnInfo, FunctionInfo.EvalGrad, ZoomState]):
                 s.current_point,
                 s.current_slope,
                 s.ls_iter_num,
+                s.accepted,
                 s.y_eval_stepsize,
             ),
             state,
@@ -968,6 +977,7 @@ class Zoom(AbstractSearch[Y, _FnInfo, FunctionInfo.EvalGrad, ZoomState]):
                 new_point,
                 new_slope,
                 new_ls_iter_num,
+                accept,
                 proposed_stepsize,
             ),
         )

@@ -3,7 +3,7 @@ from typing import cast, ClassVar, TypeAlias
 import equinox as eqx
 import jax.numpy as jnp
 from equinox.internal import ω
-from jaxtyping import Array, Bool, Scalar, ScalarLike
+from jaxtyping import Array, Bool, Int, Scalar, ScalarLike
 
 from .._custom_types import Y
 from .._search import AbstractSearch, FunctionInfo
@@ -12,6 +12,8 @@ from .._solution import RESULTS
 
 class _BacktrackingState(eqx.Module):
     step_size: Scalar
+    ls_iter_num: Int[Array, ""]
+    accepted: Bool[Array, ""]
 
 
 _FnInfo: TypeAlias = (
@@ -52,7 +54,11 @@ class BacktrackingArmijo(AbstractSearch[Y, _FnInfo, _FnEvalInfo, _BacktrackingSt
 
     def init(self, y: Y, f_info_struct: _FnInfo) -> _BacktrackingState:
         del y, f_info_struct
-        return _BacktrackingState(step_size=jnp.array(self.step_init))
+        return _BacktrackingState(
+            step_size=jnp.array(self.step_init),
+            ls_iter_num=jnp.array(0),
+            accepted=jnp.array(False),
+        )
 
     def step(
         self,
@@ -95,11 +101,17 @@ class BacktrackingArmijo(AbstractSearch[Y, _FnInfo, _FnEvalInfo, _BacktrackingSt
             accept, self.step_init, self.decrease_factor * state.step_size
         )
         step_size = cast(Scalar, step_size)
+        # Reset ls_iter_num to 0 when accepted, otherwise increment
+        ls_iter_num = jnp.where(accept, jnp.array(0), state.ls_iter_num + 1)
         return (
             step_size,
             accept,
             RESULTS.successful,
-            _BacktrackingState(step_size=step_size),
+            _BacktrackingState(
+                step_size=step_size,
+                ls_iter_num=ls_iter_num,
+                accepted=accept,
+            ),
         )
 
 
