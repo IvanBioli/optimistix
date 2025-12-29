@@ -14,6 +14,7 @@ from .gauss_newton import (
     NewtonDescent as NewtonDescent,
 )
 from .golden import GoldenSearch as GoldenSearch
+from .grid_search import GridSearch as GridSearch
 from .gradient_methods import (
     AbstractGradientDescent as AbstractGradientDescent,
     GradientDescent as GradientDescent,

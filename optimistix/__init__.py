@@ -64,6 +64,7 @@ from ._solver import (
     GaussNewton as GaussNewton,
     GoldenSearch as GoldenSearch,
     GradientDescent as GradientDescent,
+    GridSearch as GridSearch,
     hestenes_stiefel as hestenes_stiefel,
     IdentityPreconditioner as IdentityPreconditioner,
     IndirectDampedNewtonDescent as IndirectDampedNewtonDescent,
