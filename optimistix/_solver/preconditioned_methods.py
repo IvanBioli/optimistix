@@ -68,6 +68,10 @@ Preconditioner = TypeVar("Preconditioner")
 PreconditionerState = TypeVar("PreconditionerState")
 
 
+# Type variable for prepare_aux (data passed from prepare to apply but not stored)
+PrepareAux = TypeVar("PrepareAux")
+
+
 class AbstractPreconditioner(
     eqx.Module, Generic[Y, Preconditioner, PreconditionerState]
 ):
@@ -81,6 +85,11 @@ class AbstractPreconditioner(
     - Fixed preconditioners (assembled once)
     - Adaptive preconditioners (updated each iteration)
     - Lazy preconditioners (updated only when certain conditions are met)
+    
+    The `prepare_aux` mechanism allows passing non-traceable objects (like class
+    instances with closures) from `prepare` to `apply` without storing them in state.
+    This is useful for avoiding redundant computations when the same computation is
+    needed for both preconditioner construction and application.
     """
 
     @abc.abstractmethod
@@ -109,7 +118,7 @@ class AbstractPreconditioner(
         state: PreconditionerState,
         args: PyTree,
         options: dict[str, Any],
-    ) -> tuple[Preconditioner, PreconditionerState]:
+    ) -> tuple[Preconditioner, PreconditionerState, Any]:
         """Prepare/assemble the preconditioner for the current iteration.
 
         This method is called once per iteration, before applying the preconditioner.
@@ -125,8 +134,12 @@ class AbstractPreconditioner(
 
         **Returns:**
 
-        A tuple of (preconditioner, updated_state) where preconditioner is the
-        assembled preconditioner to be used in `apply`.
+        A tuple of (preconditioner, updated_state, prepare_aux) where:
+        - preconditioner: The assembled preconditioner to be used in `apply`.
+        - updated_state: The new preconditioner state (stored across iterations).
+        - prepare_aux: Optional auxiliary data passed to `apply` but NOT stored
+          in state. This is useful for passing non-traceable objects like class
+          instances with closures. Can be None if not needed.
         """
 
     @abc.abstractmethod
@@ -135,13 +148,19 @@ class AbstractPreconditioner(
         preconditioner: Preconditioner,
         preconditioner_state: PreconditionerState,
         grad: Y,
+        prepare_aux: Any = None,
     ) -> Y:
         """Apply the preconditioner to the gradient.
 
         **Arguments:**
 
         - `preconditioner`: The assembled preconditioner from `prepare`.
+        - `preconditioner_state`: The current preconditioner state.
         - `grad`: The gradient to precondition.
+        - `prepare_aux`: Optional auxiliary data from `prepare`. This is NOT
+          stored in state and is only available when `apply` is called immediately
+          after `prepare` (i.e., when a step is accepted). When `apply` is called
+          from rejected step handling, this will be None.
 
         **Returns:**
 
@@ -165,10 +184,16 @@ class IdentityPreconditioner(AbstractPreconditioner[Y, None, None]):
         state: None,
         args: PyTree,
         options: dict[str, Any],
-    ) -> tuple[None, None]:
-        return None, None
+    ) -> tuple[None, None, None]:
+        return None, None, None
 
-    def apply(self, preconditioner: None, preconditioner_state: None, grad: Y) -> Y:
+    def apply(
+        self,
+        preconditioner: None,
+        preconditioner_state: None,
+        grad: Y,
+        prepare_aux: Any = None,
+    ) -> Y:
         return grad
 
 
@@ -259,8 +284,8 @@ class PreconditionedGradientDescent(AbstractMinimiser[Y, Aux, _PreconditionedGDS
         f_info_struct = jax.eval_shape(lambda: f_info)
         preconditioner_state = self.preconditioner.init(y, f_info_struct)
 
-        # Get dummy preconditioner for initialization
-        dummy_preconditioner, _ = jax.eval_shape(
+        # Get dummy preconditioner for initialization (prepare returns 3 values now)
+        dummy_preconditioner, _, _ = jax.eval_shape(
             lambda: self.preconditioner.prepare(
                 y, f_info, preconditioner_state, args, options
             )
@@ -324,8 +349,9 @@ class PreconditionedGradientDescent(AbstractMinimiser[Y, Aux, _PreconditionedGDS
                 grad = f_eval_info.grad  # pyright: ignore
 
             # Prepare and apply preconditioner
+            # prepare() now returns (preconditioner, new_state, prepare_aux)
             f_eval_info_for_prepare = FunctionInfo.EvalGrad(f_eval, grad)
-            current_preconditioner, new_preconditioner_state = (
+            current_preconditioner, new_preconditioner_state, prepare_aux = (
                 self.preconditioner.prepare(
                     state.y_eval,
                     f_eval_info_for_prepare,
@@ -334,8 +360,10 @@ class PreconditionedGradientDescent(AbstractMinimiser[Y, Aux, _PreconditionedGDS
                     options,
                 )
             )
+            # Pass prepare_aux to apply() - this allows reusing computed data
+            # (e.g., Gramian) without storing it in state
             preconditioned_grad = self.preconditioner.apply(
-                current_preconditioner, new_preconditioner_state, grad
+                current_preconditioner, new_preconditioner_state, grad, prepare_aux
             )
 
             # Create EvalPGrad with all gradient info
@@ -517,8 +545,8 @@ class PreconditionedNonlinearCG(AbstractMinimiser[Y, Aux, _PreconditionedCGState
         f_info_struct = jax.eval_shape(lambda: f_info)
         preconditioner_state = self.preconditioner.init(y, f_info_struct)
 
-        # Get dummy preconditioner for initialization
-        dummy_preconditioner, _ = jax.eval_shape(
+        # Get dummy preconditioner for initialization (prepare returns 3 values now)
+        dummy_preconditioner, _, _ = jax.eval_shape(
             lambda: self.preconditioner.prepare(
                 y, f_info, preconditioner_state, args, options
             )
@@ -584,8 +612,9 @@ class PreconditionedNonlinearCG(AbstractMinimiser[Y, Aux, _PreconditionedCGState
                 grad = f_eval_info.grad  # pyright: ignore
 
             # Prepare and apply preconditioner
+            # prepare() now returns (preconditioner, new_state, prepare_aux)
             f_eval_info_for_prepare = FunctionInfo.EvalGrad(f_eval, grad)
-            current_preconditioner, new_preconditioner_state = (
+            current_preconditioner, new_preconditioner_state, prepare_aux = (
                 self.preconditioner.prepare(
                     state.y_eval,
                     f_eval_info_for_prepare,
@@ -594,8 +623,10 @@ class PreconditionedNonlinearCG(AbstractMinimiser[Y, Aux, _PreconditionedCGState
                     options,
                 )
             )
+            # Pass prepare_aux to apply() - this allows reusing computed data
+            # (e.g., Gramian) without storing it in state
             preconditioned_grad = self.preconditioner.apply(
-                current_preconditioner, new_preconditioner_state, grad
+                current_preconditioner, new_preconditioner_state, grad, prepare_aux
             )
 
             # Create EvalPGrad with all gradient info
