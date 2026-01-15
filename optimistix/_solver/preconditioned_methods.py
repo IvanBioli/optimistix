@@ -85,7 +85,7 @@ class AbstractPreconditioner(
     - Fixed preconditioners (assembled once)
     - Adaptive preconditioners (updated each iteration)
     - Lazy preconditioners (updated only when certain conditions are met)
-    
+
     The `prepare_aux` mechanism allows passing non-traceable objects (like class
     instances with closures) from `prepare` to `apply` without storing them in state.
     This is useful for avoiding redundant computations when the same computation is
@@ -351,13 +351,26 @@ class PreconditionedGradientDescent(AbstractMinimiser[Y, Aux, _PreconditionedGDS
             # Prepare and apply preconditioner
             # prepare() now returns (preconditioner, new_state, prepare_aux)
             f_eval_info_for_prepare = FunctionInfo.EvalGrad(f_eval, grad)
+
+            # Add step_info for Trust Region / Levenberg-Marquardt strategies
+            # This provides information about the previous step for adaptive mu
+            options_with_step_info = {**options}
+            options_with_step_info["step_info"] = {
+                "f_old": state.f_info.f,
+                "f_new": f_eval,
+                "step_size": step_size,
+                "preconditioned_grad": state.preconditioned_grad,
+                "prev_grad": state.f_info.grad,
+                "first_step": state.first_step,
+            }
+
             current_preconditioner, new_preconditioner_state, prepare_aux = (
                 self.preconditioner.prepare(
                     state.y_eval,
                     f_eval_info_for_prepare,
                     preconditioner_state,
                     args,
-                    options,
+                    options_with_step_info,
                 )
             )
             # Pass prepare_aux to apply() - this allows reusing computed data
@@ -614,13 +627,25 @@ class PreconditionedNonlinearCG(AbstractMinimiser[Y, Aux, _PreconditionedCGState
             # Prepare and apply preconditioner
             # prepare() now returns (preconditioner, new_state, prepare_aux)
             f_eval_info_for_prepare = FunctionInfo.EvalGrad(f_eval, grad)
+
+            # Add step_info for Trust Region / Levenberg-Marquardt strategies
+            options_with_step_info = {**options}
+            options_with_step_info["step_info"] = {
+                "f_old": state.f_info.f,
+                "f_new": f_eval,
+                "step_size": step_size,
+                "preconditioned_grad": precond_grad_prev,
+                "prev_grad": grad_prev,
+                "first_step": state.first_step,
+            }
+
             current_preconditioner, new_preconditioner_state, prepare_aux = (
                 self.preconditioner.prepare(
                     state.y_eval,
                     f_eval_info_for_prepare,
                     preconditioner_state,
                     args,
-                    options,
+                    options_with_step_info,
                 )
             )
             # Pass prepare_aux to apply() - this allows reusing computed data
