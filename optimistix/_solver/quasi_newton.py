@@ -1,6 +1,6 @@
 import abc
 from collections.abc import Callable
-from typing import Any, Generic, TypeVar
+from typing import Any, cast, Generic, TypeVar
 
 import equinox as eqx
 import jax
@@ -31,6 +31,7 @@ from .._search import (
 from .._solution import RESULTS
 from .backtracking import BacktrackingArmijo
 from .gauss_newton import NewtonDescent
+from .zoom import Zoom
 
 
 _Hessian = TypeVar(
@@ -122,10 +123,6 @@ class AbstractQuasiNewton(
     structure and the Hessian update state, while the latter is called to compute an
     update to the approximation of the Hessian or the inverse Hessian.
 
-    Already supported schemes to form inverse Hessian and Hessian approximations are
-    implemented in `optimistix.AbstractBFGS`, `optimistix.AbstractDFP` and
-    `optimistix.AbstractLBFGS`.
-
     Supports the following `options`:
 
     - `autodiff_mode`: whether to use forward- or reverse-mode autodifferentiation to
@@ -214,29 +211,40 @@ class AbstractQuasiNewton(
         f_eval, lin_fn, aux_eval = jax.linearize(
             lambda _y: fn(_y, args), state.y_eval, has_aux=True
         )
+
+        if self.search._needs_grad_at_y_eval:
+            grad = lin_to_grad(lin_fn, state.y_eval, autodiff_mode, f_eval.dtype)
+            f_eval_info = FunctionInfo.EvalGrad(f_eval, grad)
+        else:
+            f_eval_info = FunctionInfo.Eval(f_eval)
+
         step_size, accept, search_result, search_state = self.search.step(
             state.first_step,
             y,
             state.y_eval,
             state.f_info,
-            FunctionInfo.Eval(f_eval),
+            f_eval_info,  # pyright: ignore  # TODO Fix (jhaffner)
             state.search_state,
         )
 
         def accepted(descent_state):
-            grad = lin_to_grad(lin_fn, state.y_eval, autodiff_mode, f_eval.dtype)
+            nonlocal f_eval_info
+
+            if not self.search._needs_grad_at_y_eval:
+                grad = lin_to_grad(lin_fn, state.y_eval, autodiff_mode, f_eval.dtype)
+                f_eval_info = FunctionInfo.EvalGrad(f_eval, grad)
 
             f_eval_info, hessian_update_state = self.update_hessian(
                 y,
                 state.y_eval,
                 state.f_info,
-                FunctionInfo.EvalGrad(f_eval, grad),
+                cast(FunctionInfo.EvalGrad, f_eval_info),
                 state.hessian_update_state,
             )
 
             descent_state = self.descent.query(
                 state.y_eval,
-                f_eval_info,  # pyright: ignore
+                f_eval_info,
                 descent_state,
             )
             y_diff = (state.y_eval**ω - y**ω).ω
@@ -406,13 +414,19 @@ class AbstractBFGS(AbstractQuasiNewton[Y, Aux, _Hessian, None]):
             args,
         )
 
-        # We're using pyright: ignore here because the type of `FunctionInfo` depends on
+        # We're using type: ignore here because the type of `FunctionInfo` depends on
         # the `use_inverse` attribute.
         # https://github.com/patrick-kidger/optimistix/pull/135#discussion_r2155452558
         if self.use_inverse:
-            return FunctionInfo.EvalGradHessianInv(f_eval, grad, hessian), None  # pyright: ignore
+            return (
+                FunctionInfo.EvalGradHessianInv(f_eval, grad, hessian),  # type: ignore
+                None,
+            )
         else:
-            return FunctionInfo.EvalGradHessian(f_eval, grad, hessian), None  # pyright: ignore
+            return (
+                FunctionInfo.EvalGradHessian(f_eval, grad, hessian),  # type: ignore
+                None,
+            )
 
 
 class BFGS(AbstractBFGS[Y, Aux, _Hessian]):
@@ -447,6 +461,7 @@ class BFGS(AbstractBFGS[Y, Aux, _Hessian]):
         norm: Callable[[PyTree], Scalar] = max_norm,
         use_inverse: bool = True,
         verbose: bool | Callable[..., None] = False,
+        search: AbstractSearch = Zoom(initial_guess_strategy="one"),
     ):
         self.rtol = rtol
         self.atol = atol
@@ -564,13 +579,19 @@ class AbstractDFP(AbstractQuasiNewton[Y, Aux, _Hessian, None]):
             args,
         )
 
-        # We're using pyright: ignore here because the type of `FunctionInfo` depends on
+        # We're using type: ignore here because the type of `FunctionInfo` depends on
         # the `use_inverse` attribute.
         # https://github.com/patrick-kidger/optimistix/pull/135#discussion_r2155452558
         if self.use_inverse:
-            return FunctionInfo.EvalGradHessianInv(f_eval, grad, hessian), None  # pyright: ignore
+            return (
+                FunctionInfo.EvalGradHessianInv(f_eval, grad, hessian),  # type: ignore
+                None,
+            )
         else:
-            return FunctionInfo.EvalGradHessian(f_eval, grad, hessian), None  # pyright: ignore
+            return (
+                FunctionInfo.EvalGradHessian(f_eval, grad, hessian),  # type: ignore
+                None,
+            )
 
 
 class DFP(AbstractDFP[Y, Aux, _Hessian]):
@@ -608,6 +629,7 @@ class DFP(AbstractDFP[Y, Aux, _Hessian]):
         norm: Callable[[PyTree], Scalar] = max_norm,
         use_inverse: bool = True,
         verbose: bool | Callable[..., None] = False,
+        search: AbstractSearch = Zoom(initial_guess_strategy="one"),
     ):
         self.rtol = rtol
         self.atol = atol
