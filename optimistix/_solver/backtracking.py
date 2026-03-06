@@ -32,6 +32,7 @@ class BacktrackingArmijo(AbstractSearch[Y, _FnInfo, _FnEvalInfo, _BacktrackingSt
     decrease_factor: ScalarLike = 0.5
     slope: ScalarLike = 0.1
     step_init: ScalarLike = 1.0
+    min_stepsize: ScalarLike | None = None
     _needs_grad_at_y_eval: ClassVar[bool] = False
 
     def __post_init__(self):
@@ -51,6 +52,12 @@ class BacktrackingArmijo(AbstractSearch[Y, _FnInfo, _FnEvalInfo, _BacktrackingSt
             self.step_init <= 0,  # pyright: ignore
             "`BacktrackingArmijo(step_init=...)` must be strictly greater than 0.",
         )
+        if self.min_stepsize is not None:
+            self.min_stepsize = eqx.error_if(
+                self.min_stepsize,
+                self.min_stepsize <= 0,  # pyright: ignore
+                "`BacktrackingArmijo(min_stepsize=...)` must be strictly greater than 0.",
+            )
 
     def init(self, y: Y, f_info_struct: _FnInfo) -> _BacktrackingState:
         del y, f_info_struct
@@ -100,6 +107,13 @@ class BacktrackingArmijo(AbstractSearch[Y, _FnInfo, _FnEvalInfo, _BacktrackingSt
         step_size = jnp.where(
             accept, self.step_init, self.decrease_factor * state.step_size
         )
+
+        # If step_size goes below min_stepsize, accept and use min_stepsize
+        if self.min_stepsize is not None:
+            below_min = step_size < self.min_stepsize
+            accept = accept | below_min
+            step_size = jnp.where(below_min, self.min_stepsize, step_size)
+
         step_size = cast(Scalar, step_size)
         # Reset ls_iter_num to 0 when accepted, otherwise increment
         ls_iter_num = jnp.where(accept, jnp.array(0), state.ls_iter_num + 1)
@@ -124,4 +138,7 @@ BacktrackingArmijo.__init__.__doc__ = """**Arguments:**
     means stricter termination criteria. Must be between 0 and 1.
 - `step_init`: The first `step_size` the backtracking algorithm will
     try. Must be greater than 0.
+- `min_stepsize`: The minimum step size. If the backtracking would go below this
+    value, the step is accepted with `min_stepsize`. If `None` (default), no minimum
+    is enforced.
 """
