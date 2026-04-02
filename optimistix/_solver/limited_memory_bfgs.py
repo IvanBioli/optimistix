@@ -18,6 +18,7 @@ from .._misc import (
 )
 from .._search import (
     FunctionInfo,
+    AbstractSearch,
 )
 from .backtracking import BacktrackingArmijo
 from .gauss_newton import NewtonDescent
@@ -326,7 +327,9 @@ class AbstractLBFGS(AbstractQuasiNewton[Y, Aux, _Hessian, _LBFGSUpdateState]):
                 jax.eval_shape(lambda: y),
                 tags=lx.positive_semidefinite_tag,
             )
-            f_info = FunctionInfo.EvalGradHessianInv(f, grad, operator)  # pyright: ignore
+            f_info = FunctionInfo.EvalGradHessianInv(
+                f, grad, operator
+            )  # pyright: ignore
             return f_info, state  # pyright: ignore
         else:
             state = _LBFGSHessianUpdateState(
@@ -355,6 +358,7 @@ class AbstractLBFGS(AbstractQuasiNewton[Y, Aux, _Hessian, _LBFGSUpdateState]):
         f_info: _Hessian,
         f_eval_info: FunctionInfo.EvalGrad,
         hessian_update_state: _LBFGSUpdateState,
+        step_size: Scalar,
     ) -> tuple[_Hessian, _LBFGSUpdateState]:
         if isinstance(f_info, FunctionInfo.EvalGradHessianInv):
             operator = f_info.hessian_inv
@@ -567,7 +571,7 @@ class LBFGS(AbstractLBFGS[Y, Aux, _Hessian, _LBFGSUpdateState]):
     norm: Callable[[PyTree], Scalar]
     use_inverse: bool
     descent: NewtonDescent
-    search: BacktrackingArmijo
+    search: AbstractSearch
     history_length: int
     verbose: frozenset[str]
 
@@ -579,13 +583,14 @@ class LBFGS(AbstractLBFGS[Y, Aux, _Hessian, _LBFGSUpdateState]):
         use_inverse: bool = True,
         history_length: int = 10,
         verbose: frozenset[str] = frozenset(),
+        search: AbstractSearch = BacktrackingArmijo(),
     ):
         self.rtol = rtol
         self.atol = atol
         self.norm = norm
         self.use_inverse = use_inverse
         self.descent = NewtonDescent()
-        self.search = BacktrackingArmijo()
+        self.search = search
         self.history_length = history_length
         self.verbose = verbose
 
